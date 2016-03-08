@@ -33,6 +33,28 @@ rootfs_chroot() {
 	$DEBOOTSTRAP "${before[@]}" "$suite" "$rootfsDir" "$@"
 )
 
+# For some reason, belenos debootstrap leaks a udevd process. Kill all
+# remaining processes in the chroot with a heavy club
+# Get abs. path of rootfsDir, and escape it for inclusion into a sed regex
+rootfsDirEscaped="$(readlink -f "$rootfsDir" | sed -r 's/\\|\||\&/\\&/g')"
+sedScript='/^p/ { s/^p//; h }
+\|^n'"$rootfsDirEscaped"'| { g; p }'
+remainingProcs="$(lsof -d txt -F n 2> /dev/null | sed -n "$sedScript")"
+if [ -n "$remainingProcs" ]; then
+	echo "Warning: there are lingering processes:"
+	for p in $remainingProcs; do
+		printf '\t'
+		readlink -f /proc/$p/exe
+	done
+	echo "Killing them all."
+	kill $remainingProcs
+fi
+remainingProcs="$(lsof -d txt -F n 2> /dev/null | sed -n "$sedScript")"
+if [ -n "$remainingProcs" ]; then
+	sleep 1
+	kill -9 $remainingProcs
+fi
+
 # now for some Docker-specific tweaks
 
 # prevent init scripts from running during install/update
@@ -193,7 +215,7 @@ if [ -z "$DONT_TOUCH_SOURCES_LIST" ]; then
 				)
 			fi
 			;;
-		ubuntu)
+		ubuntu|trisquel)
 			# add the updates and security repositories
 			(
 				set -x
@@ -237,4 +259,14 @@ fi
 	# this forces "apt-get update" in dependent images, which is also good
 
 	mkdir "$rootfsDir/var/lib/apt/lists/partial" # Lucid... "E: Lists directory /var/lib/apt/lists/partial is missing."
+
 )
+
+# For unexplained reasons, sometimes debootstrap doesn't unmount all of
+# its filesystems correctly
+for mnt in $(awk '{print $2}' /proc/mounts); do
+	if [[ $mnt == "$(readlink -f $rootfsDir)"/* ]]; then
+		echo "Warning: $mnt was not unmounted properly. Unmounting."
+		umount $mnt
+	fi
+done || true

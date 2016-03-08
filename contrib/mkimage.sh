@@ -74,12 +74,8 @@ rootfsDir="$dir/rootfs"
 rm -rf "$rootfsDir/dev" "$rootfsDir/proc"
 mkdir -p "$rootfsDir/dev" "$rootfsDir/proc"
 
-# make sure /etc/resolv.conf has something useful in it
-mkdir -p "$rootfsDir/etc"
-cat > "$rootfsDir/etc/resolv.conf" <<'EOF'
-nameserver 8.8.8.8
-nameserver 8.8.4.4
-EOF
+# /etc/resolv.conf is unneeded because Docker bind-mounts in its own
+rm -f "$rootfsDir/etc/resolv.conf" || true
 
 tarFile="$dir/rootfs.tar${compression:+.$compression}"
 touch "$tarFile"
@@ -103,7 +99,7 @@ for shell in /bin/bash /usr/bin/fish /usr/bin/zsh /bin/sh; do
 	fi
 done
 
-( set -x; rm -rf "$rootfsDir" )
+( set -x; rm -rf --one-file-system "$rootfsDir" )
 
 if [ "$tag" ]; then
 	( set -x; docker build -t "$tag" "$dir" )
@@ -113,5 +109,5 @@ elif [ "$delDir" ]; then
 fi
 
 if [ "$delDir" ]; then
-	( set -x; rm -rf "$dir" )
+	( set -x; rm -rf --one-file-system "$dir" )
 fi
