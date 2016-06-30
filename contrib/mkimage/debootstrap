@@ -36,7 +36,7 @@ rootfs_chroot() {
 # For some reason, belenos debootstrap leaks a udevd process. Kill all
 # remaining processes in the chroot with a heavy club
 # Get abs. path of rootfsDir, and escape it for inclusion into a sed regex
-rootfsDirEscaped="$(readlink -f "$rootfsDir" | sed -r 's/\\|\||\&/\\&/g')"
+rootfsDirEscaped="$(readlink -f "$rootfsDir" | sed -r 's/[]\/$*.^|[]/\\&/g')"
 sedScript='/^p/ { s/^p//; h }
 \|^n'"$rootfsDirEscaped"'| { g; p }'
 remainingProcs="$(lsof -d txt -F n 2> /dev/null | sed -n "$sedScript")"
