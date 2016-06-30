@@ -15,6 +15,25 @@ done
 suite="$1"
 shift
 
+debootstrapMirror=""
+after=()
+if [ $# -gt 0 ]; then
+	after+=( "$1" )
+	debootstrapMirror="$1"
+	shift
+fi
+
+prodMirror=""
+if [ $# -gt 0 ]; then
+	prodMirror="$1"
+	shift
+fi
+
+if [ $# -gt 0 ]; then
+	after+=( "$1" )
+	shift
+fi
+
 # get path to "chroot" in our current PATH
 chrootPath="$(type -P chroot)"
 rootfs_chroot() {
@@ -30,7 +49,7 @@ rootfs_chroot() {
 
 (
 	set -x
-	$DEBOOTSTRAP "${before[@]}" "$suite" "$rootfsDir" "$@"
+	$DEBOOTSTRAP "${before[@]}" "$suite" "$rootfsDir" "${after[@]}" "$@"
 )
 
 # For some reason, belenos debootstrap leaks a udevd process. Kill all
@@ -261,6 +280,17 @@ fi
 	mkdir "$rootfsDir/var/lib/apt/lists/partial" # Lucid... "E: Lists directory /var/lib/apt/lists/partial is missing."
 
 )
+
+if [ -z "$DONT_TOUCH_SOURCES_LIST" ]; then
+	# replace debootstrap mirror by the mirror the image should actually use, when applicable
+	if [ -n "$prodMirror" ]; then
+		(
+			set -x
+			sourceList="$(cat "$rootfsDir/etc/apt/sources.list")"
+			echo "${sourceList//$debootstrapMirror/$prodMirror}" > "$rootfsDir/etc/apt/sources.list"
+		)
+	fi
+fi
 
 # For unexplained reasons, sometimes debootstrap doesn't unmount all of
 # its filesystems correctly
